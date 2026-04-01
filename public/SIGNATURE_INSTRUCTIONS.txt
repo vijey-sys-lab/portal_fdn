@@ -1,0 +1,1 @@
+Place your sign.png signature image in the public/ folder
