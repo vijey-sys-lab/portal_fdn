@@ -1,15 +1,14 @@
 // src/pages/Admins.js
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import Layout from "../components/Layout";
-import { db, storage } from "../firebase";
+import { db } from "../firebase";
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { collection, getDocs, updateDoc, doc, serverTimestamp, query, orderBy, setDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import toast from "react-hot-toast";
-import { MdAdd, MdCheck, MdClose, MdSearch, MdPerson, MdRefresh, MdCameraAlt } from "react-icons/md";
+import { MdAdd, MdCheck, MdClose, MdSearch, MdPerson, MdRefresh, MdAddCircle } from "react-icons/md";
 
-const TEAMS = ["HR", "General Management", "Fullstack", "Marketing", "Finance", "Operations"];
+const DEFAULT_TEAMS = ["HR", "General Management", "Fullstack", "Marketing", "Finance", "Operations"];
 
 const firebaseConfig = {
   apiKey: "AIzaSyCvVPDMm5kWA49jQZhG8kAs9oNkqRVoBEk",
@@ -32,10 +31,43 @@ export default function Admins() {
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [form, setForm] = useState({ name: "", email: "", password: "", team: "", phone: "", startDate: "", endDate: "" });
+  const [customTeams, setCustomTeams] = useState([]);
+  const [newCustomTeam, setNewCustomTeam] = useState("");
+  const [showCustomTeamInput, setShowCustomTeamInput] = useState(false);
+  const [form, setForm] = useState({
+    name: "", email: "", password: "", team: "", phone: "", startDate: "", endDate: ""
+  });
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { fetchAdmins(); }, []);
+  const allTeams = [...DEFAULT_TEAMS, ...customTeams];
+
+  useEffect(() => {
+    fetchAdmins();
+    // Load custom teams from localStorage
+    const saved = localStorage.getItem("bossFoundationCustomTeams");
+    if (saved) setCustomTeams(JSON.parse(saved));
+  }, []);
+
+  function addCustomTeam() {
+    const trimmed = newCustomTeam.trim();
+    if (!trimmed) { toast.error("Enter a team name"); return; }
+    if (allTeams.includes(trimmed)) { toast.error("Team already exists"); return; }
+    const updated = [...customTeams, trimmed];
+    setCustomTeams(updated);
+    localStorage.setItem("bossFoundationCustomTeams", JSON.stringify(updated));
+    setForm({ ...form, team: trimmed });
+    setNewCustomTeam("");
+    setShowCustomTeamInput(false);
+    toast.success(`Team "${trimmed}" added!`);
+  }
+
+  function removeCustomTeam(team) {
+    const updated = customTeams.filter(t => t !== team);
+    setCustomTeams(updated);
+    localStorage.setItem("bossFoundationCustomTeams", JSON.stringify(updated));
+    if (form.team === team) setForm({ ...form, team: "" });
+    toast.success(`Team "${team}" removed`);
+  }
 
   async function fetchAdmins() {
     try {
@@ -46,7 +78,9 @@ export default function Admins() {
   }
 
   async function handleAdd() {
-    if (!form.name || !form.email || !form.password || !form.team) { toast.error("Fill all required fields"); return; }
+    if (!form.name || !form.email || !form.password || !form.team) {
+      toast.error("Fill all required fields"); return;
+    }
     if (form.password.length < 6) { toast.error("Password min 6 characters"); return; }
     setSaving(true);
     try {
@@ -55,16 +89,20 @@ export default function Admins() {
       const uid = cred.user.uid;
       await signOut(secondaryAuth);
       await setDoc(doc(db, "admins", uid), {
-        uid, name: form.name, email: form.email, team: form.team, phone: form.phone,
-        startDate: form.startDate, endDate: form.endDate, status: "approved", role: "admin",
-        createdAt: serverTimestamp(),
+        uid, name: form.name, email: form.email, team: form.team,
+        phone: form.phone, startDate: form.startDate, endDate: form.endDate,
+        status: "approved", role: "admin", createdAt: serverTimestamp(),
       });
       toast.success(`Admin "${form.name}" added!`);
       setShowModal(false);
       setForm({ name: "", email: "", password: "", team: "", phone: "", startDate: "", endDate: "" });
       fetchAdmins();
     } catch (e) {
-      const msgs = { "auth/email-already-in-use": "Email already registered", "auth/invalid-email": "Invalid email", "auth/weak-password": "Password too weak" };
+      const msgs = {
+        "auth/email-already-in-use": "Email already registered",
+        "auth/invalid-email": "Invalid email",
+        "auth/weak-password": "Password too weak",
+      };
       toast.error(msgs[e.code] || e.message);
     }
     setSaving(false);
@@ -72,23 +110,32 @@ export default function Admins() {
 
   async function handleTerminate(admin) {
     if (!window.confirm(`Terminate ${admin.name}? Data will be retained.`)) return;
-    try { await updateDoc(doc(db, "admins", admin.id), { status: "terminated" }); toast.success("Terminated"); fetchAdmins(); }
-    catch { toast.error("Error"); }
+    try {
+      await updateDoc(doc(db, "admins", admin.id), { status: "terminated" });
+      toast.success("Admin terminated"); fetchAdmins();
+    } catch { toast.error("Error"); }
   }
 
   async function handleReadmit(admin) {
     if (!window.confirm(`Re-admit ${admin.name}?`)) return;
-    try { await updateDoc(doc(db, "admins", admin.id), { status: "approved" }); toast.success("Admin re-admitted!"); fetchAdmins(); }
-    catch { toast.error("Error"); }
+    try {
+      await updateDoc(doc(db, "admins", admin.id), { status: "approved" });
+      toast.success("Admin re-admitted!"); fetchAdmins();
+    } catch { toast.error("Error"); }
   }
 
   async function handleApprove(admin) {
-    try { await updateDoc(doc(db, "admins", admin.id), { status: "approved" }); toast.success("Approved"); fetchAdmins(); }
-    catch { toast.error("Error"); }
+    try {
+      await updateDoc(doc(db, "admins", admin.id), { status: "approved" });
+      toast.success("Approved"); fetchAdmins();
+    } catch { toast.error("Error"); }
   }
 
   const filtered = admins.filter(a => {
-    const matchSearch = a.name?.toLowerCase().includes(search.toLowerCase()) || a.email?.toLowerCase().includes(search.toLowerCase()) || a.team?.toLowerCase().includes(search.toLowerCase());
+    const matchSearch =
+      a.name?.toLowerCase().includes(search.toLowerCase()) ||
+      a.email?.toLowerCase().includes(search.toLowerCase()) ||
+      a.team?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "all" || a.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -104,7 +151,9 @@ export default function Admins() {
     <Layout title="Admins" subtitle="Manage admin accounts">
       <div className="page-header">
         <div><h2>Admin Management</h2><p>Add and manage admins per team</p></div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}><MdAdd /> Add Admin</button>
+        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+          <MdAdd /> Add Admin
+        </button>
       </div>
 
       <div className="card">
@@ -116,7 +165,10 @@ export default function Admins() {
               </button>
             ))}
           </div>
-          <div className="search-bar"><MdSearch /><input placeholder="Search admins..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+          <div className="search-bar">
+            <MdSearch />
+            <input placeholder="Search admins..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
         </div>
 
         {loading ? <div className="loading-center"><div className="spinner" /></div>
@@ -125,19 +177,20 @@ export default function Admins() {
         ) : (
           <div className="table-wrapper">
             <table>
-              <thead><tr><th>Name</th><th>Email</th><th>Team</th><th>Start</th><th>End</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead>
+                <tr><th>Name</th><th>Email</th><th>Team</th><th>Start</th><th>End</th><th>Status</th><th>Actions</th></tr>
+              </thead>
               <tbody>
                 {filtered.map(admin => (
                   <tr key={admin.id}>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        {admin.photoURL ? (
-                          <img src={admin.photoURL} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--accent)" }} />
-                        ) : (
-                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--accent-glow)", border: "2px solid var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12, color: "var(--accent)" }}>
-                            {admin.name?.charAt(0).toUpperCase()}
-                          </div>
-                        )}
+                        {admin.photoURL
+                          ? <img src={admin.photoURL} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--accent)" }} />
+                          : <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--accent-glow)", border: "2px solid var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12, color: "var(--accent)" }}>
+                              {admin.name?.charAt(0).toUpperCase()}
+                            </div>
+                        }
                         <div>
                           <div style={{ fontWeight: 600, fontSize: 13 }}>{admin.name}</div>
                           {admin.phone && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{admin.phone}</div>}
@@ -148,7 +201,11 @@ export default function Admins() {
                     <td><span className="badge badge-purple">{admin.team}</span></td>
                     <td style={{ fontSize: 13 }}>{admin.startDate || "—"}</td>
                     <td style={{ fontSize: 13 }}>{admin.endDate || "—"}</td>
-                    <td><span className={`badge badge-${admin.status === "approved" ? "success" : admin.status === "terminated" ? "danger" : "warning"}`}>{admin.status}</span></td>
+                    <td>
+                      <span className={`badge badge-${admin.status === "approved" ? "success" : admin.status === "terminated" ? "danger" : "warning"}`}>
+                        {admin.status}
+                      </span>
+                    </td>
                     <td>
                       <div style={{ display: "flex", gap: 6 }}>
                         {admin.status === "pending" && <button className="btn btn-success btn-sm" onClick={() => handleApprove(admin)}><MdCheck /></button>}
@@ -164,6 +221,7 @@ export default function Admins() {
         )}
       </div>
 
+      {/* Add Admin Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal modal-lg">
@@ -173,13 +231,89 @@ export default function Admins() {
             </div>
             <div className="modal-body">
               <div className="form-grid">
-                <div className="form-group"><label className="form-label">Full Name *</label><input className="form-input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Admin Name" /></div>
-                <div className="form-group"><label className="form-label">Email *</label><input className="form-input" type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} placeholder="admin@email.com" /></div>
-                <div className="form-group"><label className="form-label">Password * (min 6)</label><input className="form-input" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="Min 6 characters" /></div>
-                <div className="form-group"><label className="form-label">Team *</label><select className="form-select" value={form.team} onChange={e => setForm({...form, team: e.target.value})}><option value="">Select Team</option>{TEAMS.map(t => <option key={t}>{t}</option>)}</select></div>
-                <div className="form-group"><label className="form-label">Phone</label><input className="form-input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="+91 XXXXX XXXXX" /></div>
-                <div className="form-group"><label className="form-label">Start Date</label><input className="form-input" type="date" value={form.startDate} onChange={e => setForm({...form, startDate: e.target.value})} /></div>
-                <div className="form-group"><label className="form-label">End Date</label><input className="form-input" type="date" value={form.endDate} onChange={e => setForm({...form, endDate: e.target.value})} /></div>
+                <div className="form-group">
+                  <label className="form-label">Full Name *</label>
+                  <input className="form-input" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Admin Name" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Email *</label>
+                  <input className="form-input" type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} placeholder="admin@email.com" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Password * (min 6)</label>
+                  <input className="form-input" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="Min 6 characters" />
+                </div>
+
+                {/* Team field with custom team support */}
+                <div className="form-group">
+                  <label className="form-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span>Team *</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomTeamInput(!showCustomTeamInput)}
+                      style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4, fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}
+                    >
+                      <MdAddCircle /> Add New Team
+                    </button>
+                  </label>
+
+                  {/* Custom team input */}
+                  {showCustomTeamInput && (
+                    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                      <input
+                        className="form-input"
+                        value={newCustomTeam}
+                        onChange={e => setNewCustomTeam(e.target.value)}
+                        placeholder="New team name..."
+                        onKeyDown={e => e.key === "Enter" && addCustomTeam()}
+                        style={{ flex: 1 }}
+                      />
+                      <button type="button" className="btn btn-primary btn-sm" onClick={addCustomTeam}>Add</button>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowCustomTeamInput(false); setNewCustomTeam(""); }}>Cancel</button>
+                    </div>
+                  )}
+
+                  <select
+                    className="form-select"
+                    value={form.team}
+                    onChange={e => setForm({...form, team: e.target.value})}
+                  >
+                    <option value="">Select Team</option>
+                    <optgroup label="Default Teams">
+                      {DEFAULT_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </optgroup>
+                    {customTeams.length > 0 && (
+                      <optgroup label="Custom Teams">
+                        {customTeams.map(t => <option key={t} value={t}>{t}</option>)}
+                      </optgroup>
+                    )}
+                  </select>
+
+                  {/* Custom teams management */}
+                  {customTeams.length > 0 && (
+                    <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {customTeams.map(t => (
+                        <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: 20, padding: "3px 10px", fontSize: 12, color: "var(--purple)" }}>
+                          {t}
+                          <button type="button" onClick={() => removeCustomTeam(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Phone</label>
+                  <input className="form-input" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="+91 XXXXX XXXXX" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Start Date</label>
+                  <input className="form-input" type="date" value={form.startDate} onChange={e => setForm({...form, startDate: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">End Date</label>
+                  <input className="form-input" type="date" value={form.endDate} onChange={e => setForm({...form, endDate: e.target.value})} />
+                </div>
               </div>
             </div>
             <div className="modal-footer">
