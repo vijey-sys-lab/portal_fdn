@@ -6,10 +6,7 @@ import { initializeApp, getApps } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { collection, getDocs, updateDoc, doc, serverTimestamp, query, orderBy, setDoc } from "firebase/firestore";
 import toast from "react-hot-toast";
-import { MdAdd, MdCheck, MdClose, MdSearch, MdPerson, MdRefresh, MdAddCircle, MdDownload } from "react-icons/md";
-import jsPDF from "jspdf";
-import signatureBase64 from "../signatureData";
-import { differenceInDays } from "date-fns";
+import { MdAdd, MdCheck, MdClose, MdSearch, MdPerson, MdRefresh, MdAddCircle } from "react-icons/md";
 
 const DEFAULT_TEAMS = ["HR", "General Management", "Fullstack", "Marketing", "Finance", "Operations"];
 
@@ -26,183 +23,6 @@ function getSecondaryAuth() {
   const existing = getApps().find(a => a.name === "secondary");
   const app = existing || initializeApp(firebaseConfig, "secondary");
   return getAuth(app);
-}
-
-// ─── Admin Offer Letter ───────────────────────────────────────────────────────
-function generateAdminOfferLetter(admin) {
-  const pdf = new jsPDF({ unit: "mm", format: "a4" });
-  const W = 210;
-  const today = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" });
-  const refNo = `BF/ADM/${new Date().getFullYear()}/${Math.random().toString(36).slice(2,7).toUpperCase()}`;
-
-  // Gold header
-  pdf.setFillColor(245, 166, 35); pdf.rect(0, 0, W, 18, "F");
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(13); pdf.setTextColor(0, 0, 0);
-  pdf.text("BOSS FOUNDATION", W / 2, 11, { align: "center" });
-
-  // Dark subheader
-  pdf.setFillColor(22, 22, 31); pdf.rect(0, 18, W, 10, "F");
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(9); pdf.setTextColor(200, 200, 200);
-  pdf.text("Internship Management Portal  |  Inspiring Growth", W / 2, 24, { align: "center" });
-
-  // Title
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(18); pdf.setTextColor(30, 30, 30);
-  pdf.text("ADMIN APPOINTMENT LETTER", W / 2, 44, { align: "center" });
-  pdf.setDrawColor(245, 166, 35); pdf.setLineWidth(0.8); pdf.line(35, 47, W - 35, 47);
-
-  // Date & Ref
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(9); pdf.setTextColor(120, 120, 120);
-  pdf.text(`Date: ${today}`, 20, 55);
-  pdf.text(`Ref No: ${refNo}`, W - 20, 55, { align: "right" });
-  pdf.setDrawColor(220, 220, 220); pdf.setLineWidth(0.3); pdf.line(20, 59, W - 20, 59);
-
-  // Addressee
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(10); pdf.setTextColor(30, 30, 30);
-  pdf.text("To,", 20, 67);
-  pdf.setFontSize(12); pdf.text(admin.name, 20, 74);
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(10); pdf.setTextColor(80, 80, 80);
-  pdf.text(`Email: ${admin.email}`, 20, 81);
-  if (admin.phone) pdf.text(`Phone: ${admin.phone}`, 20, 87);
-  pdf.setDrawColor(220, 220, 220); pdf.line(20, 93, W - 20, 93);
-
-  // Subject
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(11); pdf.setTextColor(30, 30, 30);
-  pdf.text("Sub: Admin Appointment Letter — BOSS Foundation", 20, 101);
-
-  // Body
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(10.5); pdf.setTextColor(50, 50, 50);
-  pdf.text(`Dear ${admin.name},`, 20, 112);
-  const intro = "We are pleased to appoint you as an Admin at BOSS Foundation. Your role involves overseeing interns, reviewing daily journals, approving tasks, and ensuring smooth operations within your team.";
-  pdf.text(pdf.splitTextToSize(intro, W - 40), 20, 120);
-
-  // Details box
-  pdf.setFillColor(248, 248, 248); pdf.setDrawColor(245, 166, 35); pdf.setLineWidth(0.4);
-  pdf.roundedRect(20, 133, W - 40, 46, 3, 3, "FD");
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(10); pdf.setTextColor(245, 166, 35);
-  pdf.text("APPOINTMENT DETAILS", 25, 141);
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(10); pdf.setTextColor(40, 40, 40);
-  const details = [
-    ["Admin Name", admin.name],
-    ["Designation", "Admin"],
-    ["Team / Domain", admin.team],
-    ["Start Date", admin.startDate || "—"],
-    ["End Date", admin.endDate || "—"],
-  ];
-  details.forEach(([label, value], i) => {
-    const y = 149 + i * 6;
-    pdf.setFont("helvetica", "bold"); pdf.text(`${label}:`, 25, y);
-    pdf.setFont("helvetica", "normal"); pdf.text(value, 80, y);
-  });
-
-  // Responsibilities
-  let y = 190;
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(10); pdf.setTextColor(30, 30, 30);
-  pdf.text("RESPONSIBILITIES:", 20, y); y += 7;
-  pdf.setFont("helvetica", "normal"); pdf.setTextColor(60, 60, 60);
-  [
-    "• Manage and monitor assigned intern profiles and activities",
-    "• Review and remark on intern daily journals",
-    "• Assign tasks and track completion by interns",
-    "• Submit weekly reviews to Super Admin",
-    "• Conduct leave approvals for interns under your supervision",
-    "• Maintain professionalism and report to Super Admin",
-  ].forEach(line => { pdf.text(line, 25, y); y += 6.5; });
-
-  y += 4;
-  pdf.setFontSize(10); pdf.text("We welcome you to the BOSS Foundation team and look forward to your leadership.", 20, y);
-  y += 10; pdf.text("Yours sincerely,", 20, y); y += 4;
-
-  // Signature
-  try { pdf.addImage(signatureBase64, "PNG", 20, y, 50, 20); } catch (e) { console.error(e); }
-  y += 24;
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(10); pdf.setTextColor(30, 30, 30);
-  pdf.text("Vijey Prasanna", 20, y);
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(9); pdf.setTextColor(100, 100, 100);
-  pdf.text("Chief Executive Officer", 20, y + 5);
-  pdf.text("BOSS Foundation", 20, y + 10);
-
-  // Footer
-  pdf.setFillColor(245, 166, 35); pdf.rect(0, 285, W, 12, "F");
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(8); pdf.setTextColor(0, 0, 0);
-  pdf.text("BOSS Foundation  |  Internship Management Portal  |  Inspiring Growth", W / 2, 292, { align: "center" });
-
-  pdf.save(`Admin_Appointment_${admin.name.replace(/ /g, "_")}.pdf`);
-}
-
-// ─── Admin Certificate ────────────────────────────────────────────────────────
-function generateAdminCertificate(admin) {
-  if (!admin.startDate || !admin.endDate) {
-    toast.error("Start date and end date required for certificate"); return;
-  }
-  const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  const W = 297; const H = 210;
-  const days = differenceInDays(new Date(admin.endDate), new Date(admin.startDate));
-
-  // Dark background
-  pdf.setFillColor(10, 10, 15); pdf.rect(0, 0, W, H, "F");
-
-  // Gold outer border
-  pdf.setDrawColor(245, 166, 35); pdf.setLineWidth(4); pdf.rect(8, 8, W - 16, H - 16);
-  pdf.setLineWidth(1); pdf.rect(13, 13, W - 26, H - 26);
-
-  // Header
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(11); pdf.setTextColor(245, 166, 35);
-  pdf.text("BOSS FOUNDATION", W / 2, 30, { align: "center" });
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(8); pdf.setTextColor(160, 160, 160);
-  pdf.text("I N S P I R I N G   G R O W T H", W / 2, 37, { align: "center" });
-  pdf.setDrawColor(245, 166, 35); pdf.setLineWidth(0.5); pdf.line(60, 41, W - 60, 41);
-
-  // Certificate title
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(28); pdf.setTextColor(255, 255, 255);
-  pdf.text("Certificate of Administration", W / 2, 63, { align: "center" });
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(10); pdf.setTextColor(180, 180, 180);
-  pdf.text("A P P R E C I A T I O N   &   S E R V I C E", W / 2, 72, { align: "center" });
-
-  // Presented to
-  pdf.setFontSize(12); pdf.setTextColor(160, 160, 160);
-  pdf.text("This is to proudly certify that", W / 2, 88, { align: "center" });
-
-  // Admin name
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(26); pdf.setTextColor(245, 166, 35);
-  pdf.text(admin.name, W / 2, 103, { align: "center" });
-  const nameWidth = pdf.getTextWidth(admin.name);
-  pdf.setDrawColor(245, 166, 35); pdf.setLineWidth(0.5);
-  pdf.line(W / 2 - nameWidth / 2, 106, W / 2 + nameWidth / 2, 106);
-
-  // Description
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(11); pdf.setTextColor(200, 200, 200);
-  pdf.text("has served as Admin at BOSS Foundation in the domain of", W / 2, 116, { align: "center" });
-
-  // Team
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(15); pdf.setTextColor(255, 255, 255);
-  pdf.text(admin.team, W / 2, 126, { align: "center" });
-
-  // Duration
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(10); pdf.setTextColor(160, 160, 160);
-  pdf.text(
-    `Duration: ${admin.startDate} to ${admin.endDate}  (${days} days of service)`,
-    W / 2, 137, { align: "center" }
-  );
-
-  // Divider
-  pdf.setDrawColor(80, 80, 80); pdf.setLineWidth(0.3); pdf.line(40, 148, W - 40, 148);
-
-  // Signature
-  const sigX = W / 2 - 35;
-  try { pdf.addImage(signatureBase64, "PNG", sigX, 152, 70, 22); } catch (e) { console.error(e); }
-  pdf.setDrawColor(245, 166, 35); pdf.setLineWidth(0.4);
-  pdf.line(W / 2 - 40, 176, W / 2 + 40, 176);
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(10); pdf.setTextColor(255, 255, 255);
-  pdf.text("Vijey Prasanna", W / 2, 182, { align: "center" });
-  pdf.setFont("helvetica", "normal"); pdf.setFontSize(8); pdf.setTextColor(160, 160, 160);
-  pdf.text("Chief Executive Officer, BOSS Foundation", W / 2, 188, { align: "center" });
-
-  // Footer bar
-  pdf.setFillColor(245, 166, 35); pdf.rect(0, H - 12, W, 12, "F");
-  pdf.setFont("helvetica", "bold"); pdf.setFontSize(8); pdf.setTextColor(0, 0, 0);
-  pdf.text("BOSS FOUNDATION  |  INTERNSHIP MANAGEMENT PORTAL  |  INSPIRING GROWTH", W / 2, H - 4, { align: "center" });
-
-  pdf.save(`Admin_Certificate_${admin.name.replace(/ /g, "_")}.pdf`);
 }
 
 export default function Admins() {
@@ -223,21 +43,21 @@ export default function Admins() {
 
   useEffect(() => {
     fetchAdmins();
+    // Load custom teams from localStorage
     const saved = localStorage.getItem("bossFoundationCustomTeams");
-    if (saved) { try { setCustomTeams(JSON.parse(saved)); } catch (e) {} }
+    if (saved) setCustomTeams(JSON.parse(saved));
   }, []);
 
   function addCustomTeam() {
     const trimmed = newCustomTeam.trim();
     if (!trimmed) { toast.error("Enter a team name"); return; }
-    if (allTeams.map(t => t.toLowerCase()).includes(trimmed.toLowerCase())) {
-      toast.error("Team already exists"); return;
-    }
+    if (allTeams.includes(trimmed)) { toast.error("Team already exists"); return; }
     const updated = [...customTeams, trimmed];
     setCustomTeams(updated);
     localStorage.setItem("bossFoundationCustomTeams", JSON.stringify(updated));
     setForm({ ...form, team: trimmed });
-    setNewCustomTeam(""); setShowCustomTeamInput(false);
+    setNewCustomTeam("");
+    setShowCustomTeamInput(false);
     toast.success(`Team "${trimmed}" added!`);
   }
 
@@ -246,6 +66,7 @@ export default function Admins() {
     setCustomTeams(updated);
     localStorage.setItem("bossFoundationCustomTeams", JSON.stringify(updated));
     if (form.team === team) setForm({ ...form, team: "" });
+    toast.success(`Team "${team}" removed`);
   }
 
   async function fetchAdmins() {
@@ -289,19 +110,25 @@ export default function Admins() {
 
   async function handleTerminate(admin) {
     if (!window.confirm(`Terminate ${admin.name}? Data will be retained.`)) return;
-    try { await updateDoc(doc(db, "admins", admin.id), { status: "terminated" }); toast.success("Terminated"); fetchAdmins(); }
-    catch { toast.error("Error"); }
+    try {
+      await updateDoc(doc(db, "admins", admin.id), { status: "terminated" });
+      toast.success("Admin terminated"); fetchAdmins();
+    } catch { toast.error("Error"); }
   }
 
   async function handleReadmit(admin) {
     if (!window.confirm(`Re-admit ${admin.name}?`)) return;
-    try { await updateDoc(doc(db, "admins", admin.id), { status: "approved" }); toast.success("Re-admitted!"); fetchAdmins(); }
-    catch { toast.error("Error"); }
+    try {
+      await updateDoc(doc(db, "admins", admin.id), { status: "approved" });
+      toast.success("Admin re-admitted!"); fetchAdmins();
+    } catch { toast.error("Error"); }
   }
 
   async function handleApprove(admin) {
-    try { await updateDoc(doc(db, "admins", admin.id), { status: "approved" }); toast.success("Approved"); fetchAdmins(); }
-    catch { toast.error("Error"); }
+    try {
+      await updateDoc(doc(db, "admins", admin.id), { status: "approved" });
+      toast.success("Approved"); fetchAdmins();
+    } catch { toast.error("Error"); }
   }
 
   const filtered = admins.filter(a => {
@@ -309,7 +136,8 @@ export default function Admins() {
       a.name?.toLowerCase().includes(search.toLowerCase()) ||
       a.email?.toLowerCase().includes(search.toLowerCase()) ||
       a.team?.toLowerCase().includes(search.toLowerCase());
-    return (statusFilter === "all" || a.status === statusFilter) && matchSearch;
+    const matchStatus = statusFilter === "all" || a.status === statusFilter;
+    return matchSearch && matchStatus;
   });
 
   const tabs = [
@@ -323,7 +151,9 @@ export default function Admins() {
     <Layout title="Admins" subtitle="Manage admin accounts">
       <div className="page-header">
         <div><h2>Admin Management</h2><p>Add and manage admins per team</p></div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}><MdAdd /> Add Admin</button>
+        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+          <MdAdd /> Add Admin
+        </button>
       </div>
 
       <div className="card">
@@ -336,7 +166,8 @@ export default function Admins() {
             ))}
           </div>
           <div className="search-bar">
-            <MdSearch /><input placeholder="Search admins..." value={search} onChange={e => setSearch(e.target.value)} />
+            <MdSearch />
+            <input placeholder="Search admins..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
         </div>
 
@@ -346,7 +177,9 @@ export default function Admins() {
         ) : (
           <div className="table-wrapper">
             <table>
-              <thead><tr><th>Name</th><th>Email</th><th>Team</th><th>Start</th><th>End</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead>
+                <tr><th>Name</th><th>Email</th><th>Team</th><th>Start</th><th>End</th><th>Status</th><th>Actions</th></tr>
+              </thead>
               <tbody>
                 {filtered.map(admin => (
                   <tr key={admin.id}>
@@ -374,24 +207,10 @@ export default function Admins() {
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: 6 }}>
                         {admin.status === "pending" && <button className="btn btn-success btn-sm" onClick={() => handleApprove(admin)}><MdCheck /></button>}
                         {admin.status === "approved" && <button className="btn btn-danger btn-sm" onClick={() => handleTerminate(admin)}><MdClose /> Terminate</button>}
                         {admin.status === "terminated" && <button className="btn btn-success btn-sm" onClick={() => handleReadmit(admin)}><MdRefresh /> Re-admit</button>}
-                        {/* Offer Letter - always available */}
-                        <button className="btn btn-secondary btn-sm" onClick={() => generateAdminOfferLetter(admin)} title="Download Appointment Letter">
-                          <MdDownload /> Letter
-                        </button>
-                        {/* Certificate - available after tenure ends */}
-                        {admin.endDate && new Date() >= new Date(admin.endDate) ? (
-                          <button className="btn btn-success btn-sm" onClick={() => generateAdminCertificate(admin)} title="Download Certificate">
-                            <MdDownload /> Cert
-                          </button>
-                        ) : (
-                          <button className="btn btn-secondary btn-sm" disabled title="Available after tenure ends" style={{ opacity: 0.4 }}>
-                            <MdDownload /> Cert
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -425,24 +244,40 @@ export default function Admins() {
                   <input className="form-input" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="Min 6 characters" />
                 </div>
 
-                {/* Custom Team Field */}
+                {/* Team field with custom team support */}
                 <div className="form-group">
                   <label className="form-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span>Team *</span>
-                    <button type="button" onClick={() => setShowCustomTeamInput(!showCustomTeamInput)}
-                      style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4, fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomTeamInput(!showCustomTeamInput)}
+                      style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4, fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}
+                    >
                       <MdAddCircle /> Add New Team
                     </button>
                   </label>
+
+                  {/* Custom team input */}
                   {showCustomTeamInput && (
                     <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                      <input className="form-input" value={newCustomTeam} onChange={e => setNewCustomTeam(e.target.value)}
-                        placeholder="New team name..." onKeyDown={e => e.key === "Enter" && addCustomTeam()} style={{ flex: 1 }} />
+                      <input
+                        className="form-input"
+                        value={newCustomTeam}
+                        onChange={e => setNewCustomTeam(e.target.value)}
+                        placeholder="New team name..."
+                        onKeyDown={e => e.key === "Enter" && addCustomTeam()}
+                        style={{ flex: 1 }}
+                      />
                       <button type="button" className="btn btn-primary btn-sm" onClick={addCustomTeam}>Add</button>
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowCustomTeamInput(false); setNewCustomTeam(""); }}>✕</button>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowCustomTeamInput(false); setNewCustomTeam(""); }}>Cancel</button>
                     </div>
                   )}
-                  <select className="form-select" value={form.team} onChange={e => setForm({...form, team: e.target.value})}>
+
+                  <select
+                    className="form-select"
+                    value={form.team}
+                    onChange={e => setForm({...form, team: e.target.value})}
+                  >
                     <option value="">Select Team</option>
                     <optgroup label="Default Teams">
                       {DEFAULT_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -453,6 +288,8 @@ export default function Admins() {
                       </optgroup>
                     )}
                   </select>
+
+                  {/* Custom teams management */}
                   {customTeams.length > 0 && (
                     <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {customTeams.map(t => (
